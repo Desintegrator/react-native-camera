@@ -23,6 +23,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
+import android.util.Base64;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+
 public class FileFaceDetectionAsyncTask extends AsyncTask<Void, Void, Void> {
   private static final String ERROR_TAG = "E_FACE_DETECTION_FAILED";
 
@@ -40,6 +44,9 @@ public class FileFaceDetectionAsyncTask extends AsyncTask<Void, Void, Void> {
   private int mOrientation = ExifInterface.ORIENTATION_UNDEFINED;
   private RNFaceDetector mRNFaceDetector;
 
+  private byte[] decodedString;
+  private Bitmap bitmapRaw;
+
   public FileFaceDetectionAsyncTask(Context context, ReadableMap options, Promise promise) {
     mUri = options.getString("uri");
     mPromise = promise;
@@ -49,35 +56,52 @@ public class FileFaceDetectionAsyncTask extends AsyncTask<Void, Void, Void> {
 
   @Override
   protected void onPreExecute() {
-    if (mUri == null) {
-      mPromise.reject(ERROR_TAG, "You have to provide an URI of an image.");
+
+    if (mUri == null || mUri.isEmpty()) {
+      mPromise.reject(ERROR_TAG, "No URI provided");
       cancel(true);
       return;
     }
 
-    Uri uri = Uri.parse(mUri);
-    mPath = uri.getPath();
-
-    if (mPath == null) {
-      mPromise.reject(ERROR_TAG, "Invalid URI provided: `" + mUri + "`.");
+    try {
+      decodedString = Base64.decode(mUri, Base64.DEFAULT);
+      bitmapRaw = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+    } catch (Throwable e) {
+      mPromise.reject(ERROR_TAG, "Error while decoding base64");
       cancel(true);
       return;
     }
+    
 
-    // We have to check if the requested image is in a directory safely accessible by our app.
-    boolean fileIsInSafeDirectories =
-          mPath.startsWith(mContext.getCacheDir().getPath()) || mPath.startsWith(mContext.getFilesDir().getPath());
+    // if (mUri == null) {
+    //   mPromise.reject(ERROR_TAG, "You have to provide an URI of an image.");
+    //   cancel(true);
+    //   return;
+    // }
 
-    if (!fileIsInSafeDirectories) {
-      mPromise.reject(ERROR_TAG, "The image has to be in the local app's directories.");
-      cancel(true);
-      return;
-    }
+    // Uri uri = Uri.parse(mUri);
+    // mPath = uri.getPath();
 
-    if(!new File(mPath).exists()) {
-      mPromise.reject(ERROR_TAG, "The file does not exist. Given path: `" + mPath + "`.");
-      cancel(true);
-    }
+    // if (mPath == null) {
+    //   mPromise.reject(ERROR_TAG, "Invalid URI provided: `" + mUri + "`.");
+    //   cancel(true);
+    //   return;
+    // }
+
+    // // We have to check if the requested image is in a directory safely accessible by our app.
+    // boolean fileIsInSafeDirectories =
+    //       mPath.startsWith(mContext.getCacheDir().getPath()) || mPath.startsWith(mContext.getFilesDir().getPath());
+
+    // if (!fileIsInSafeDirectories) {
+    //   mPromise.reject(ERROR_TAG, "The image has to be in the local app's directories.");
+    //   cancel(true);
+    //   return;
+    // }
+
+    // if(!new File(mPath).exists()) {
+    //   mPromise.reject(ERROR_TAG, "The file does not exist. Given path: `" + mPath + "`.");
+    //   cancel(true);
+    // }
   }
 
   @Override
@@ -88,15 +112,16 @@ public class FileFaceDetectionAsyncTask extends AsyncTask<Void, Void, Void> {
 
     mRNFaceDetector = detectorForOptions(mOptions, mContext);
 
-    try {
-      ExifInterface exif = new ExifInterface(mPath);
-      mOrientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED);
-    } catch (IOException e) {
-      Log.e(ERROR_TAG, "Reading orientation from file `" + mPath + "` failed.", e);
-    }
+    // try {
+    //   ExifInterface exif = new ExifInterface(mPath);
+    //   mOrientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED);
+    // } catch (IOException e) {
+    //   Log.e(ERROR_TAG, "Reading orientation from file `" + mPath + "` failed.", e);
+    // }
 
     try {
-      FirebaseVisionImage image = FirebaseVisionImage.fromFilePath(mContext, Uri.parse(mUri));
+      // FirebaseVisionImage image = FirebaseVisionImage.fromFilePath(mContext, Uri.parse(mUri));
+      FirebaseVisionImage image = FirebaseVisionImage.fromBitmap(bitmapRaw);
       FirebaseVisionFaceDetector detector = mRNFaceDetector.getDetector();
       detector.detectInImage(image)
               .addOnSuccessListener(
@@ -114,7 +139,7 @@ public class FileFaceDetectionAsyncTask extends AsyncTask<Void, Void, Void> {
                           mPromise.reject(ERROR_TAG, "Text recognition task failed", e);
                         }
                       });
-    } catch (IOException e) {
+    } catch (Throwable e) {
       e.printStackTrace();
       Log.e(ERROR_TAG, "Creating Firebase Image from uri" + mUri + "failed", e);
       mPromise.reject(ERROR_TAG, "Creating Firebase Image from uri" + mUri + "failed", e);
